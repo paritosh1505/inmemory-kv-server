@@ -6,11 +6,13 @@ import (
 	"log"
 	"net"
 	"strings"
+	"sync"
 )
 
 type kvstore struct {
 	entry map[string]string
 	port  string
+	mux   sync.Mutex
 }
 
 func Newkvstore(port string) *kvstore {
@@ -37,7 +39,7 @@ func (k *kvstore) Start(chanval chan struct{}) {
 
 }
 func (k *kvstore) handleConn(conn net.Conn) {
-	//defer conn.Close()
+	defer conn.Close()
 	reader := bufio.NewReader(conn)
 	for {
 		msg, err := reader.ReadString('\n')
@@ -56,21 +58,38 @@ func (kvstore *kvstore) DataStorage(msg string, conn net.Conn) {
 	operation := result[0]
 	switch operation {
 	case "SET":
+		kvstore.mux.Lock()
 		kvstore.entry[result[1]] = result[2]
+		kvstore.mux.Unlock()
+		//fmt.Println("Server Set")
+		fmt.Fprint(conn, "SET_OK\n")
 
-		fmt.Println("Server Set")
-		fmt.Fprint(conn, "OK\n")
 	case "GET":
-		fmt.Println("result val,=>", result[1])
-		result[1] = strings.ReplaceAll(result[1], "\n", "")
-		entry := kvstore.entry[result[1]]
-		fmt.Println("key val is", kvstore.entry[result[1]])
-		fmt.Fprint(conn, "OK\n")
+		kvstore.mux.Lock()
+		_, ok := kvstore.entry[result[1]]
+		kvstore.mux.Unlock()
+		if !ok {
+			fmt.Fprint(conn, "NOT_FOUND\n")
+		} else {
+			//fmt.Println("key val is", kvstore.entry[result[1]])
+			fmt.Fprint(conn, "GET_OK\n")
+			//fmt.Println("Entry at index ", result[1], " is", entry)
+		}
 
-		fmt.Println("Entry at index ", result[1], " is", entry)
 	case "DEL":
-		fmt.Println("Delete Operation started")
-		delete(kvstore.entry, result[1])
+		//fmt.Println("Delete Operation started for", result[1])
+		kvstore.mux.Lock()
+		_, ok := kvstore.entry[result[1]]
+		kvstore.mux.Unlock()
+		if !ok {
+			fmt.Fprint(conn, "DEL_ERR\n")
+		} else {
+			kvstore.mux.Lock()
+			delete(kvstore.entry, result[1])
+			kvstore.mux.Unlock()
+			fmt.Fprint(conn, "DELETE_OK\n")
+
+		}
 	}
 
 }

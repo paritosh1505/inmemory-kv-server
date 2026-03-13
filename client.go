@@ -25,10 +25,12 @@ func (c *clientMsg) ClientStart() {
 	defer conn.Close()
 	conn.Write([]byte(c.msg))
 	reader := bufio.NewReader(conn)
-	strval, err := reader.ReadString('\n')
-	if err != nil {
-		log.Fatal("close")
+	for {
+		strval, err := reader.ReadString('\n')
+		if err != nil {
+			log.Fatal("close")
+		}
+		fmt.Println("**********", strval)
+
 	}
-	fmt.Println("**********", strval)
-	fmt.Println("Client connection started")
 }
